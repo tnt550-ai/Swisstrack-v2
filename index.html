@@ -3,34 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>SwissTrack Pro V8 - GA Analysis</title>
+    <title>SwissTrack Pro V8.5</title>
     
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="theme-color" content="#dc2626">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
     <style>
         .progress-ga { transition: width 1.5s cubic-bezier(0.34, 1.56, 0.64, 1); }
-        .tab-active { border-bottom: 3px solid #dc2626; color: #dc2626; }
-        #map { height: 160px; border-radius: 24px; }
+        .suggestions-box { position: absolute; z-index: 100; width: 100%; background: white; border-radius: 12px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); margin-top: 4px; max-height: 200px; overflow-y: auto; }
         .card-grad { background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); }
     </style>
 </head>
-<body class="bg-slate-50 font-sans pb-10">
+<body class="bg-slate-50 font-sans pb-10 min-h-screen">
 
 <div class="max-w-md mx-auto p-4">
     <header class="flex justify-between items-center mb-6">
         <h1 class="text-2xl font-black text-red-600 tracking-tighter">SWISSTRACK PRO</h1>
-        <div class="flex gap-2">
-            <button onclick="backupData()" class="p-2 bg-white rounded-full shadow-sm border border-slate-200"><i data-lucide="database" class="w-5 h-5 text-slate-400"></i></button>
-        </div>
+        <button onclick="backupData()" class="p-2 bg-white rounded-full border border-slate-200"><i data-lucide="database" class="w-5 h-5 text-slate-400"></i></button>
     </header>
 
-    <div class="card-grad p-6 rounded-[2.5rem] shadow-2xl text-white mb-6">
-        <span class="text-[10px] font-bold opacity-80 uppercase tracking-widest">GA gültig bis: 11.08.2026</span>
+    <div class="card-grad p-6 rounded-[2.5rem] shadow-xl text-white mb-6">
+        <span class="text-[10px] font-bold opacity-80 uppercase tracking-widest">GA-Check bis 11.08.2026</span>
         <div class="text-4xl font-black mb-1">CHF <span id="projectedYear">0</span></div>
-        <p class="text-[11px] opacity-90 mb-4" id="predictionMsg">Berechne Prognose für den aktuellen GA-Zeitraum...</p>
+        <p class="text-[11px] opacity-90 mb-4" id="predictionMsg">Lade Prognose...</p>
         
         <div class="w-full bg-white/20 h-2.5 rounded-full overflow-hidden mb-2">
             <div id="gaProgress" class="progress-ga bg-white h-full" style="width: 0%"></div>
@@ -41,29 +38,41 @@
         </div>
     </div>
 
-    <div class="bg-white rounded-[2rem] shadow-sm border border-slate-200 p-2 mb-6">
-        <div class="flex text-center text-xs font-bold text-slate-400 uppercase tracking-widest">
-            <button id="tabMonths" onclick="switchTab('months')" class="flex-1 py-3 tab-active">Monate</button>
-            <button id="tabYears" onclick="switchTab('years')" class="flex-1 py-3">Jahre</button>
+    <div class="grid grid-cols-2 gap-3 mb-6">
+        <div class="bg-white p-4 rounded-3xl border border-slate-200">
+            <span class="block text-[9px] font-bold text-slate-400 uppercase">Total Distanz</span>
+            <span id="totalKM" class="text-xl font-black text-slate-800">0.0</span> <small class="text-xs text-slate-400">km</small>
         </div>
-        <div id="statsContent" class="p-4 max-h-60 overflow-y-auto space-y-3">
-            </div>
+        <div class="bg-white p-4 rounded-3xl border border-slate-200">
+            <span class="block text-[9px] font-bold text-slate-400 uppercase">Durchschnitt</span>
+            <span id="avgPrice" class="text-xl font-black text-red-600">0.00</span> <small class="text-xs text-slate-400">CHF/km</small>
+        </div>
     </div>
 
     <div class="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-200 mb-6">
-        <div class="flex gap-2 mb-4">
-            <button onclick="applyCommute()" class="flex-1 bg-slate-50 border border-slate-100 p-3 rounded-2xl text-left active:scale-95 transition-transform">
-                <div class="font-bold text-slate-700 text-[11px]">🏠 Pendeln</div>
-                <div class="text-[9px] text-slate-400">Lachen → Glattpark (10.70)</div>
-            </button>
-            <button onclick="saveEntry()" class="bg-red-600 text-white px-6 rounded-2xl font-bold text-xs">Speichern</button>
-        </div>
-        <div class="grid grid-cols-2 gap-2">
+        <button onclick="applyCommute()" class="w-full bg-slate-50 border border-slate-100 p-4 rounded-2xl flex items-center justify-between mb-4 active:scale-95 transition-transform">
+            <div class="text-left">
+                <div class="font-bold text-slate-700 text-sm">🏠 Pendeln: Lachen → Glattpark</div>
+                <div class="text-[10px] text-slate-400">Direkt CHF 10.70 einrechnen</div>
+            </div>
+            <i data-lucide="zap" class="text-red-600 w-5 h-5"></i>
+        </button>
+
+        <div class="grid grid-cols-2 gap-2 mb-3">
             <input type="date" id="mDate" class="p-3 bg-slate-50 border border-slate-100 rounded-xl text-xs outline-none">
-            <input type="number" id="mPrice" placeholder="Preis CHF" class="p-3 bg-slate-50 border border-slate-100 rounded-xl text-xs outline-none">
+            <input type="number" step="0.05" id="mPrice" placeholder="Preis CHF" class="p-3 bg-slate-50 border border-slate-100 rounded-xl text-xs outline-none">
         </div>
-        <input type="text" id="mFrom" placeholder="Start..." class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-xs mt-2 outline-none">
-        <input type="text" id="mTo" placeholder="Ziel..." class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-xs mt-2 outline-none">
+
+        <div class="relative mb-3">
+            <input type="text" id="mFrom" oninput="handleAutocomplete('mFrom')" placeholder="Startbahnhof..." autocomplete="off" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-xs outline-none">
+            <div id="mFromSuggestions" class="suggestions-box hidden"></div>
+        </div>
+        <div class="relative mb-3">
+            <input type="text" id="mTo" oninput="handleAutocomplete('mTo')" placeholder="Zielbahnhof..." autocomplete="off" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-xs outline-none">
+            <div id="mToSuggestions" class="suggestions-box hidden"></div>
+        </div>
+        
+        <button onclick="saveEntry()" id="btnSave" class="w-full bg-red-600 text-white py-4 rounded-2xl text-xs font-bold shadow-lg shadow-red-100">Fahrt speichern</button>
     </div>
 
     <div id="journeyList" class="space-y-3"></div>
@@ -73,14 +82,53 @@
     const GA_PRICE = 3995;
     const GA_EXPIRY = new Date('2026-08-11');
     let journeys = JSON.parse(localStorage.getItem('swissJourneys') || '[]');
-    let currentTab = 'months';
 
     document.getElementById('mDate').valueAsDate = new Date();
+
+    // --- AUTOCOMPLETE LOGIK ---
+    let timer;
+    function handleAutocomplete(fieldId) {
+        clearTimeout(timer);
+        const input = document.getElementById(fieldId);
+        const box = document.getElementById(fieldId + 'Suggestions');
+        const query = input.value;
+
+        if (query.length < 2) { box.classList.add('hidden'); return; }
+
+        timer = setTimeout(async () => {
+            const res = await fetch(`https://transport.opendata.ch/v1/locations?query=${encodeURIComponent(query)}&type=station`);
+            const data = await res.json();
+            
+            box.innerHTML = '';
+            if (data.stations.length > 0) {
+                box.classList.remove('hidden');
+                data.stations.slice(0, 5).forEach(s => {
+                    const d = document.createElement('div');
+                    d.className = 'p-3 text-xs border-b border-slate-50 active:bg-slate-100';
+                    d.innerText = s.name;
+                    d.onclick = () => { input.value = s.name; box.classList.add('hidden'); };
+                    box.appendChild(d);
+                });
+            }
+        }, 300);
+    }
+
+    // --- KM BERECHNUNG ---
+    function calculateDistance(lat1, lon1, lat2, lon2) {
+        const pLat1 = parseFloat(lat1), pLon1 = parseFloat(lon1), pLat2 = parseFloat(lat2), pLon2 = parseFloat(lon2);
+        const R = 6371;
+        const dLat = (pLat2 - pLat1) * Math.PI / 180;
+        const dLon = (pLon2 - pLon1) * Math.PI / 180;
+        const a = Math.sin(dLat/2)**2 + Math.cos(pLat1*Math.PI/180)*Math.cos(pLat2*Math.PI/180)*Math.sin(dLon/2)**2;
+        const dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)) * 1.25;
+        return parseFloat(dist.toFixed(1));
+    }
 
     async function applyCommute() {
         document.getElementById('mFrom').value = "Lachen, Bahnhof";
         document.getElementById('mTo').value = "Glattpark (Opfikon), Glattpark";
         document.getElementById('mPrice').value = "10.70";
+        await saveEntry();
     }
 
     async function saveEntry() {
@@ -90,88 +138,61 @@
         const dateStr = document.getElementById('mDate').value;
         if(!from || !to) return;
 
-        const s1 = await fetch(`https://transport.opendata.ch/v1/locations?query=${from}`).then(r => r.json()).then(d => d.stations[0]);
-        const s2 = await fetch(`https://transport.opendata.ch/v1/locations?query=${to}`).then(r => r.json()).then(d => d.stations[0]);
+        document.getElementById('btnSave').innerText = "Berechne...";
+        
+        try {
+            const s1 = await fetch(`https://transport.opendata.ch/v1/locations?query=${encodeURIComponent(from)}`).then(r => r.json()).then(d => d.stations[0]);
+            const s2 = await fetch(`https://transport.opendata.ch/v1/locations?query=${encodeURIComponent(to)}`).then(r => r.json()).then(d => d.stations[0]);
 
-        const km = calculateDistance(s1.coordinate.x, s1.coordinate.y, s2.coordinate.x, s2.coordinate.y);
-        journeys.unshift({ id: Date.now(), from: s1.name, to: s2.name, price, km, date: new Date(dateStr).toISOString() });
-        localStorage.setItem('swissJourneys', JSON.stringify(journeys));
-        render();
-    }
-
-    function calculateDistance(la1, lo1, la2, lo2) {
-        const R = 6371;
-        const dLat = (la2 - la1) * Math.PI / 180;
-        const dLon = (lo2 - lo1) * Math.PI / 180;
-        const a = Math.sin(dLat/2)**2 + Math.cos(la1*Math.PI/180)*Math.cos(la2*Math.PI/180)*Math.sin(dLon/2)**2;
-        return parseFloat((R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)) * 1.25).toFixed(1));
-    }
-
-    function switchTab(tab) {
-        currentTab = tab;
-        document.getElementById('tabMonths').classList.toggle('tab-active', tab === 'months');
-        document.getElementById('tabYears').classList.toggle('tab-active', tab === 'years');
-        render();
+            const km = calculateDistance(s1.coordinate.x, s1.coordinate.y, s2.coordinate.x, s2.coordinate.y);
+            
+            journeys.unshift({ id: Date.now(), from: s1.name, to: s2.name, price, km, date: new Date(dateStr).toISOString() });
+            localStorage.setItem('swissJourneys', JSON.stringify(journeys));
+            
+            document.getElementById('mFrom').value = '';
+            document.getElementById('mTo').value = '';
+            document.getElementById('mPrice').value = '';
+            render();
+        } catch(e) { alert("Bahnhof nicht gefunden"); }
+        finally { document.getElementById('btnSave').innerText = "Fahrt speichern"; }
     }
 
     function render() {
         const now = new Date();
-        
-        // GA-Zeitraum Logik (Zyklus bis 11.08.2026)
-        const currentCycleStart = new Date(GA_EXPIRY);
-        currentCycleStart.setFullYear(GA_EXPIRY.getFullYear() - 1);
-        currentCycleStart.setDate(GA_EXPIRY.getDate() + 1);
+        const totalKM = journeys.reduce((s, j) => s + j.km, 0);
+        const totalSpent = journeys.reduce((s, j) => s + j.price, 0);
+        const avg = totalKM > 0 ? (totalSpent / totalKM) : 0;
 
-        const currentCycleTrips = journeys.filter(j => {
-            const d = new Date(j.date);
-            return d >= currentCycleStart && d <= GA_EXPIRY;
-        });
-
-        const totalSpentCycle = currentCycleTrips.reduce((s, j) => s + j.price, 0);
+        document.getElementById('totalKM').innerText = totalKM.toFixed(1);
+        document.getElementById('avgPrice').innerText = avg.toFixed(2);
+        document.getElementById('spentLabel').innerText = `CHF ${totalSpent.toFixed(2)}`;
         
-        // Prognose
-        if (currentCycleTrips.length > 0) {
-            const firstTrip = new Date(currentCycleTrips[currentCycleTrips.length-1].date);
-            const daysSoFar = Math.ceil((now - firstTrip) / (1000*60*60*24)) || 1;
-            const projected = (totalSpentCycle / daysSoFar) * 365;
+        // GA Prognose (Zyklus-Logik)
+        const cycleStart = new Date(GA_EXPIRY);
+        cycleStart.setFullYear(GA_EXPIRY.getFullYear() - 1);
+        
+        const cycleTrips = journeys.filter(j => new Date(j.date) >= cycleStart);
+        const spentInCycle = cycleTrips.reduce((s, j) => s + j.price, 0);
+
+        if (cycleTrips.length > 0) {
+            const firstTrip = new Date(cycleTrips[cycleTrips.length-1].date);
+            const daysUsed = Math.ceil((now - firstTrip) / (1000*60*60*24)) || 1;
+            const projected = (spentInCycle / daysUsed) * 365;
             document.getElementById('projectedYear').innerText = Math.round(projected).toLocaleString();
             
-            const amortDate = new Date(firstTrip.getTime() + (GA_PRICE / (totalSpentCycle / daysSoFar)) * 24*60*60*1000);
+            const remaining = GA_PRICE - spentInCycle;
             document.getElementById('predictionMsg').innerText = projected > GA_PRICE 
-                ? `GA rentiert ab ${amortDate.toLocaleDateString('de-CH')}. Ersparnis: CHF ${Math.round(projected - GA_PRICE)}.`
-                : `Einzelbillette sind aktuell günstiger als ein neues GA.`;
+                ? `GA rentiert! Du sparst ca. CHF ${Math.round(projected - GA_PRICE)} pro Jahr.`
+                : `Aktuell fährst du zu wenig für ein GA (Prognose: CHF ${Math.round(projected)}).`;
         }
 
-        document.getElementById('spentLabel').innerText = `CHF ${totalSpentCycle.toFixed(2)}`;
-        document.getElementById('gaProgress').style.width = Math.min((totalSpentCycle / GA_PRICE) * 100, 100) + '%';
+        document.getElementById('gaProgress').style.width = Math.min((spentInCycle / GA_PRICE) * 100, 100) + '%';
 
-        // Stats Rendering
-        const statsBox = document.getElementById('statsContent');
-        statsBox.innerHTML = '';
-        
-        const groups = {};
-        journeys.forEach(j => {
-            const d = new Date(j.date);
-            const key = currentTab === 'months' 
-                ? d.toLocaleString('de-CH', { month: 'long', year: 'numeric' })
-                : d.getFullYear();
-            groups[key] = (groups[key] || 0) + j.price;
-        });
-
-        Object.keys(groups).forEach(key => {
-            statsBox.innerHTML += `
-                <div class="flex justify-between items-center text-sm border-b border-slate-50 pb-2">
-                    <span class="text-slate-500 font-medium">${key}</span>
-                    <span class="font-black text-slate-800">CHF ${groups[key].toFixed(2)}</span>
-                </div>`;
-        });
-
-        // Historie (die letzten 5)
         const list = document.getElementById('journeyList');
-        list.innerHTML = '<h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-2 mb-2">Letzte Fahrten</h3>';
-        journeys.slice(0, 5).forEach(j => {
+        list.innerHTML = '';
+        journeys.slice(0, 10).forEach(j => {
             list.innerHTML += `<div class="bg-white p-4 rounded-3xl border border-slate-100 flex justify-between items-center shadow-sm">
-                <div class="flex-1 truncate pr-2"><div class="font-bold text-slate-800 text-xs truncate">${j.from} → ${j.to}</div><div class="text-[9px] text-slate-400 font-bold">${new Date(j.date).toLocaleDateString('de-CH')}</div></div>
+                <div class="flex-1 truncate pr-2"><div class="font-bold text-slate-800 text-xs truncate">${j.from} → ${j.to}</div><div class="text-[9px] text-slate-400 font-bold">${new Date(j.date).toLocaleDateString('de-CH')} • ${j.km} km</div></div>
                 <div class="text-red-600 font-black text-xs">CHF ${j.price.toFixed(2)}</div>
             </div>`;
         });
@@ -180,7 +201,7 @@
 
     function backupData() {
         const blob = new Blob([JSON.stringify(journeys)], { type: 'application/json' });
-        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'swisstrack_v8.json'; a.click();
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'swisstrack_v85.json'; a.click();
     }
 
     render();
