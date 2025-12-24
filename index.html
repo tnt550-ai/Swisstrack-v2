@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SwissTrack Pro V3</title>
+    
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#dc2626">
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/821/821355.png">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        .progress-bar { transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1); }
+        canvas { max-height: 180px; }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen font-sans pb-10">
+
+<div class="max-w-md mx-auto p-4">
+    <header class="flex justify-between items-center mb-6 mt-2">
+        <h1 class="text-2xl font-black text-red-600 flex items-center gap-2">
+            <i data-lucide="train"></i> SWISSTRACK
+        </h1>
+        <button onclick="exportToCSV()" class="p-2 bg-white rounded-full shadow-sm border border-slate-200 text-slate-600">
+            <i data-lucide="download" class="w-5 h-5"></i>
+        </button>
+    </header>
+
+    <div class="bg-white p-5 rounded-3xl shadow-sm border border-slate-200 mb-6">
+        <div class="flex justify-between items-end mb-2">
+            <div>
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-tighter">Monatsbudget</span>
+                <div class="text-2xl font-black text-slate-800">CHF <span id="currentMonthTotal">0.00</span></div>
+            </div>
+            <div class="text-right">
+                <span class="text-xs text-slate-400">Ziel: CHF <span id="goalDisplay">200</span></span>
+            </div>
+        </div>
+        <div class="w-full bg-slate-100 h-3 rounded-full overflow-hidden">
+            <div id="budgetProgress" class="progress-bar bg-red-600 h-full" style="width: 0%"></div>
+        </div>
+        <p id="budgetMessage" class="text-[10px] mt-2 text-slate-500 italic"></p>
+    </div>
+
+    <div id="trackerCard" class="bg-white p-6 rounded-3xl shadow-xl border border-slate-200 mb-6 text-center">
+        <div id="statusText" class="text-slate-400 font-bold mb-4 text-xs uppercase tracking-widest">Bereit</div>
+        <div class="relative inline-flex items-center p-1 bg-slate-100 rounded-full w-full h-16 cursor-pointer" onclick="toggleCheckIn()">
+            <div id="handle" class="absolute left-1 w-14 h-14 bg-white rounded-full shadow-md flex items-center justify-center transition-all duration-300 z-10">
+                <i id="handleIcon" data-lucide="play" class="text-red-600"></i>
+            </div>
+            <span id="buttonLabel" class="w-full text-center font-bold text-slate-400">Check-In</span>
+        </div>
+        <div id="activeInfo" class="hidden mt-4 text-left p-3 bg-red-50 rounded-xl border border-red-100">
+            <div id="startTime" class="text-slate-800 font-bold">Laden...</div>
+            <div class="text-[10px] text-red-400 font-bold uppercase">Fahrt läuft</div>
+        </div>
+    </div>
+
+    <div class="bg-white p-4 rounded-3xl shadow-sm border border-slate-200 mb-6">
+        <h3 class="text-xs font-bold text-slate-400 uppercase mb-4">Ausgaben letzte 7 Tage</h3>
+        <canvas id="weeklyChart"></canvas>
+    </div>
+
+    <div class="grid grid-cols-2 gap-3 mb-6">
+        <div class="bg-white p-4 rounded-2xl border border-slate-200">
+            <span class="block text-[10px] text-slate-400 font-bold uppercase">Total KM</span>
+            <span id="totalKM" class="text-xl font-black text-slate-800">0.0</span>
+        </div>
+        <div class="bg-white p-4 rounded-2xl border border-slate-200">
+            <span class="block text-[10px] text-slate-400 font-bold uppercase">Ø CHF/KM</span>
+            <span id="avgDisplay" class="text-xl font-black text-red-600">0.45</span>
+        </div>
+    </div>
+
+    <div id="journeyList" class="space-y-3"></div>
+</div>
+
+<script>
+    let journeys = JSON.parse(localStorage.getItem('swissJourneys') || '[]');
+    let state = JSON.parse(localStorage.getItem('trackerState') || '{"active": false, "startStation": null, "startTime": null}');
+    let config = JSON.parse(localStorage.getItem('trackerConfig') || '{"avgChfKm": 0.45, "dataPoints": 1, "budgetGoal": 200}');
+    let myChart;
+
+    async function getNearestStation() {
+        return new Promise((resolve) => {
+            navigator.geolocation.getCurrentPosition(async (pos) => {
+                const res = await fetch(`https://transport.opendata.ch/v1/locations?x=${pos.coords.latitude}&y=${pos.coords.longitude}&type=station`);
+                const data = await res.json();
+                resolve(data.stations[0]);
+            }, () => { alert("Bitte GPS aktivieren"); resolve(null); });
+        });
+    }
+
+    async function toggleCheckIn() {
+        if (!state.active) {
+            const station = await getNearestStation();
+            if(!station) return;
+            state = { active: true, startStation: station, startTime: Date.now() };
+            saveAndRender();
+        } else {
+            const endStation = await getNearestStation();
+            if(!endStation) return;
+            const km = calculateDistance(state.startStation.coordinate.x, state.startStation.coordinate.y, endStation.coordinate.x, endStation.coordinate.y);
+            let est = km * config.avgChfKm;
+            const real = prompt(`Ankunft in ${endStation.name} (${km} km).\nKosten?`, est.toFixed(2));
+            const finalPrice = real ? parseFloat(real) : est;
+
+            if(real && km > 0) {
+                config.avgChfKm = ((config.avgChfKm * config.dataPoints) + (finalPrice/km)) / (config.dataPoints + 1);
+                config.dataPoints++;
+            }
+
+            journeys.unshift({ id: Date.now(), from: state.startStation.name, to: endStation.name, price: finalPrice, km: parseFloat(km), date: new Date().toISOString() });
+            state = { active: false, startStation: null, startTime: null };
+            saveAndRender();
+        }
+    }
+
+    function calculateDistance(lat1, lon1, lat2, lon2) {
+        const R = 6371;
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+        return (R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)) * 1.25).toFixed(1);
+    }
+
+    function saveAndRender() {
+        localStorage.setItem('swissJourneys', JSON.stringify(journeys));
+        localStorage.setItem('trackerState', JSON.stringify(state));
+        localStorage.setItem('trackerConfig', JSON.stringify(config));
+        render();
+    }
+
+    function render() {
+        // Budget Logik
+        const now = new Date();
+        const thisMonth = journeys.filter(j => {
+            const d = new Date(j.date);
+            return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+        });
+        const monthSum = thisMonth.reduce((a, b) => a + b.price, 0);
+        document.getElementById('currentMonthTotal').innerText = monthSum.toFixed(2);
+        document.getElementById('goalDisplay').innerText = config.budgetGoal;
+        const percent = Math.min((monthSum / config.budgetGoal) * 100, 100);
+        document.getElementById('budgetProgress').style.width = percent + '%';
+        document.getElementById('budgetMessage').innerText = percent >= 100 ? "Budget erreicht!" : `Noch CHF ${(config.budgetGoal - monthSum).toFixed(2)} verfügbar`;
+
+        // Stats & List
+        document.getElementById('totalKM').innerText = journeys.reduce((a, b) => a + b.km, 0).toFixed(1);
+        document.getElementById('avgDisplay').innerText = config.avgChfKm.toFixed(2);
+        
+        const list = document.getElementById('journeyList');
+        list.innerHTML = '';
+        journeys.slice(0, 5).forEach(j => {
+            list.innerHTML += `
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex justify-between items-center">
+                    <div>
+                        <div class="font-bold text-slate-800 text-sm">${j.from} → ${j.to}</div>
+                        <div class="text-[10px] text-slate-400 font-bold">${new Date(j.date).toLocaleDateString('de-CH')} • ${j.km} KM</div>
+                    </div>
+                    <div class="font-black text-red-600 text-sm">CHF ${j.price.toFixed(2)}</div>
+                </div>`;
+        });
+
+        updateUI();
+        updateChart();
+    }
+
+    function updateUI() {
+        const handle = document.getElementById('handle');
+        const label = document.getElementById('buttonLabel');
+        const info = document.getElementById('activeInfo');
+        if (state.active) {
+            handle.style.left = "calc(100% - 3.75rem)";
+            handle.classList.add('bg-red-600');
+            document.getElementById('handleIcon').setAttribute('data-lucide', 'square');
+            label.innerText = "Check-Out";
+            info.classList.remove('hidden');
+            document.getElementById('startTime').innerText = state.startStation.name;
+        } else {
+            handle.style.left = "0.25rem";
+            handle.classList.remove('bg-red-600');
+            document.getElementById('handleIcon').setAttribute('data-lucide', 'play');
+            label.innerText = "Check-In";
+            info.classList.add('hidden');
+        }
+        lucide.createIcons();
+    }
+
+    function updateChart() {
+        const ctx = document.getElementById('weeklyChart').getContext('2d');
+        const last7Days = [...Array(7)].map((_, i) => {
+            const d = new Date(); d.setDate(d.getDate() - i);
+            return d.toISOString().split('T')[0];
+        }).reverse();
+
+        const data = last7Days.map(date => {
+            return journeys.filter(j => j.date.split('T')[0] === date).reduce((a, b) => a + b.price, 0);
+        });
+
+        if (myChart) myChart.destroy();
+        myChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].slice(-7), // Vereinfacht
+                datasets: [{ label: 'CHF', data: data, backgroundColor: '#dc2626', borderRadius: 8 }]
+            },
+            options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, display: false }, x: { grid: { display: false } } } }
+        });
+    }
+
+    function exportToCSV() {
+        let csv = "\uFEFFDatum;Von;Bis;KM;CHF\n";
+        journeys.forEach(j => csv += `${new Date(j.date).toLocaleDateString()};${j.from};${j.to};${j.km};${j.price}\n`);
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'SwissTrack_Export.csv'; a.click();
+    }
+
+    render();
+</script>
+</body>
+</html>
