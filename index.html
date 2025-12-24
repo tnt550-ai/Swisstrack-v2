@@ -3,285 +3,214 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>SwissTrack Pro V4.5</title>
+    <title>SwissTrack GA-Predictor V7</title>
+    
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#dc2626">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
     <style>
-        .progress-bar { transition: width 0.8s ease; }
-        input::placeholder { color: #cbd5e1; }
+        :root { --sbb-red: #dc2626; }
+        body { background-color: #f8fafc; transition: background 0.3s; }
+        .progress-ga { transition: width 1.5s cubic-bezier(0.34, 1.56, 0.64, 1); }
+        #map { height: 180px; border-radius: 20px; z-index: 1; }
+        .dark-mode { background-color: #0f172a; color: white; }
+        .dark-mode .bg-white { background-color: #1e293b; border-color: #334155; color: white; }
+        .card-grad { background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); }
     </style>
 </head>
-<body class="bg-slate-50 min-h-screen font-sans pb-20">
+<body class="font-sans pb-10">
 
 <div class="max-w-md mx-auto p-4">
-    <header class="flex justify-between items-center mb-6 mt-2">
+    <header class="flex justify-between items-center mb-6">
         <h1 class="text-2xl font-black text-red-600 tracking-tighter flex items-center gap-2">
-            <i data-lucide="train"></i> SWISSTRACK
+            <i data-lucide="trending-up"></i> GA-PREDICTOR
         </h1>
-        <button onclick="exportToCSV()" class="p-2 bg-white rounded-full shadow-sm border border-slate-200 text-slate-600">
-            <i data-lucide="download" class="w-5 h-5"></i>
-        </button>
+        <div class="flex gap-2">
+            <button onclick="toggleDarkMode()" class="p-2 bg-white rounded-full shadow-sm border border-slate-200"><i data-lucide="moon" class="w-5 h-5"></i></button>
+            <button onclick="backupData()" class="p-2 bg-white rounded-full shadow-sm border border-slate-200"><i data-lucide="database" class="w-5 h-5"></i></button>
+        </div>
     </header>
 
-    <div class="bg-white p-5 rounded-3xl shadow-sm border border-slate-200 mb-6">
-        <div class="flex justify-between items-end mb-2">
-            <div>
-                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Monatsbudget</span>
-                <div class="text-2xl font-black text-slate-800">CHF <span id="currentMonthTotal">0.00</span></div>
-            </div>
-            <div class="text-right text-xs text-slate-400">Ziel: <span id="goalDisplay">200</span> CHF</div>
-        </div>
-        <div class="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
-            <div id="budgetProgress" class="progress-bar bg-red-600 h-full" style="width: 0%"></div>
-        </div>
-    </div>
-
-    <div id="inputArea" class="bg-white p-6 rounded-3xl shadow-xl border border-slate-200 mb-6">
-        <h3 id="formTitle" class="text-[10px] font-bold text-slate-400 uppercase mb-4 tracking-widest">Neue Reise erfassen</h3>
-        
-        <div class="space-y-3">
-            <div class="grid grid-cols-2 gap-2">
-                <div class="flex flex-col gap-1">
-                    <label class="text-[9px] font-bold text-slate-400 uppercase ml-1">Datum</label>
-                    <input type="date" id="mDate" class="p-3 bg-slate-50 border border-slate-100 rounded-2xl text-xs outline-none focus:ring-2 focus:ring-red-500/20">
-                </div>
-                <div class="flex flex-col gap-1">
-                    <label class="text-[9px] font-bold text-slate-400 uppercase ml-1">Preis (CHF)</label>
-                    <input type="number" step="0.05" id="mPrice" placeholder="0.00" class="p-3 bg-slate-50 border border-slate-100 rounded-2xl text-xs outline-none focus:ring-2 focus:ring-red-500/20">
-                </div>
-            </div>
-            <input type="text" id="mFrom" placeholder="Startbahnhof (z.B. Lachen)" class="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs outline-none focus:ring-2 focus:ring-red-500/20">
-            <input type="text" id="mTo" placeholder="Zielbahnhof (z.B. Zürich HB)" class="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs outline-none focus:ring-2 focus:ring-red-500/20">
+    <div class="card-grad p-6 rounded-[2.5rem] shadow-2xl shadow-red-200 text-white mb-6 relative overflow-hidden">
+        <div class="relative z-10">
+            <span class="text-[10px] font-bold opacity-80 uppercase tracking-widest">Jahresprognose 2025</span>
+            <div class="text-4xl font-black mb-1">CHF <span id="projectedTotal">0</span></div>
+            <p class="text-[11px] opacity-90 leading-relaxed mb-4" id="predictionText">Lade Daten...</p>
             
-            <div class="flex gap-2 pt-2">
-                <button onclick="saveEntry()" id="btnSave" class="flex-1 bg-red-600 text-white py-4 rounded-2xl text-xs font-bold shadow-lg shadow-red-100 active:scale-95 transition-transform">
-                    Fahrt speichern
-                </button>
-                <button id="btnCancel" onclick="cancelEdit()" class="hidden bg-slate-100 text-slate-500 px-4 rounded-2xl text-xs font-bold">Abbruch</button>
+            <div class="grid grid-cols-2 gap-3 mt-4">
+                <div class="bg-white/10 backdrop-blur-md p-3 rounded-2xl border border-white/10">
+                    <div class="text-[9px] uppercase font-bold opacity-70">GA lohnt sich ab</div>
+                    <div class="text-sm font-black" id="breakEvenDate">-</div>
+                </div>
+                <div class="bg-white/10 backdrop-blur-md p-3 rounded-2xl border border-white/10">
+                    <div class="text-[9px] uppercase font-bold opacity-70">Ersparnis vs. GA</div>
+                    <div class="text-sm font-black" id="potentialSaving">0.-</div>
+                </div>
             </div>
         </div>
+        <i data-lucide="bar-chart-3" class="absolute -right-4 -bottom-4 w-32 h-32 opacity-10 rotate-12"></i>
+    </div>
 
-        <div class="flex items-center my-4">
-            <div class="flex-1 h-px bg-slate-100"></div>
-            <span class="px-3 text-[9px] font-bold text-slate-300 uppercase">Oder</span>
-            <div class="flex-1 h-px bg-slate-100"></div>
-        </div>
-
-        <div class="relative inline-flex items-center p-1 bg-slate-100 rounded-full w-full h-14 cursor-pointer" onclick="toggleCheckIn()">
-            <div id="handle" class="absolute left-1 w-12 h-12 bg-white rounded-full shadow-md flex items-center justify-center transition-all duration-300 z-10">
-                <i id="handleIcon" data-lucide="play" class="text-red-600 w-5 h-5"></i>
+    <div class="bg-white p-6 rounded-[2rem] shadow-xl border border-slate-100 mb-6">
+        <div class="flex justify-between items-center mb-4">
+            <div>
+                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Aktuelle Ausgaben</span>
+                <div class="text-2xl font-black text-slate-800" id="totalSpent">0.00</div>
             </div>
-            <span id="buttonLabel" class="w-full text-center font-bold text-slate-400 text-[11px] uppercase tracking-wider">Live Check-In</span>
+            <div class="text-right">
+                <span class="text-[10px] font-bold text-green-500 uppercase">CO2 Ersparnis</span>
+                <div class="text-lg font-black text-slate-800"><span id="co2Saved">0</span> <small class="text-xs">kg</small></div>
+            </div>
         </div>
-        
-        <div id="activeInfo" class="hidden mt-3 text-left p-3 bg-red-50 rounded-xl border border-red-100">
-            <div id="startTimeText" class="text-slate-800 font-bold text-[11px] truncate">Suche Standort...</div>
-            <div class="text-[8px] text-red-500 font-bold uppercase tracking-widest">GPS Fahrt läuft</div>
+        <div class="relative w-full bg-slate-100 h-4 rounded-full overflow-hidden mb-2">
+            <div id="gaProgress" class="progress-ga bg-red-600 h-full" style="width: 0%"></div>
+        </div>
+        <div class="flex justify-between text-[9px] font-bold text-slate-400">
+            <span>START</span>
+            <span id="gaStatusLabel">0% VOM GA ERREICHT</span>
+            <span>GA CHF 3'995.-</span>
         </div>
     </div>
 
-    <div class="bg-white p-4 rounded-3xl border border-slate-200 mb-8">
-        <canvas id="weeklyChart" style="height: 100px;"></canvas>
+    <div class="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200 mb-6">
+        <button onclick="applyCommute()" class="w-full bg-slate-50 border border-slate-100 p-4 rounded-2xl flex items-center justify-between mb-4 active:scale-95 transition-transform">
+            <div class="text-left">
+                <div class="font-bold text-slate-700 text-sm">🏠 Pendelstrecke</div>
+                <div class="text-[10px] text-slate-400">Lachen → Glattpark (10.70 CHF)</div>
+            </div>
+            <i data-lucide="arrow-right-circle" class="text-red-600"></i>
+        </button>
+        <div class="grid grid-cols-2 gap-2 mb-2">
+            <input type="date" id="mDate" class="p-3 bg-slate-50 border border-slate-100 rounded-xl text-xs outline-none">
+            <input type="number" id="mPrice" placeholder="Preis CHF" class="p-3 bg-slate-50 border border-slate-100 rounded-xl text-xs outline-none">
+        </div>
+        <input type="text" id="mFrom" placeholder="Start..." class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-xs outline-none mb-2">
+        <input type="text" id="mTo" placeholder="Ziel..." class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-xs outline-none">
+        <button onclick="saveEntry()" class="w-full bg-red-600 text-white py-4 rounded-2xl text-xs font-bold mt-4">Fahrt speichern</button>
     </div>
 
+    <div class="bg-white p-2 rounded-[2rem] border border-slate-200 mb-6 overflow-hidden"><div id="map"></div></div>
     <div id="journeyList" class="space-y-3"></div>
 </div>
 
 <script>
+    const GA_PRICE = 3995;
     let journeys = JSON.parse(localStorage.getItem('swissJourneys') || '[]');
-    let state = JSON.parse(localStorage.getItem('trackerState') || '{"active": false, "startStation": null, "startTime": null}');
-    let config = JSON.parse(localStorage.getItem('trackerConfig') || '{"avgChfKm": 0.45, "dataPoints": 1, "budgetGoal": 200}');
-    let editingId = null;
-    let myChart;
+    let map, markers = [];
 
     document.getElementById('mDate').valueAsDate = new Date();
 
+    function initMap() {
+        map = L.map('map', { zoomControl: false, attributionControl: false }).setView([47.19, 8.7], 10);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png').addTo(map);
+        updateMap();
+    }
+
+    async function applyCommute() {
+        document.getElementById('mFrom').value = "Lachen, Bahnhof";
+        document.getElementById('mTo').value = "Glattpark (Opfikon), Glattpark";
+        document.getElementById('mPrice').value = "10.70";
+        await saveEntry();
+    }
+
     async function saveEntry() {
-        const fromVal = document.getElementById('mFrom').value;
-        const toVal = document.getElementById('mTo').value;
+        const from = document.getElementById('mFrom').value;
+        const to = document.getElementById('mTo').value;
         const price = parseFloat(document.getElementById('mPrice').value) || 0;
         const date = document.getElementById('mDate').value;
-        const btn = document.getElementById('btnSave');
+        if(!from || !to) return;
 
-        if(!fromVal || !toVal) return alert("Bitte Start und Ziel eingeben.");
-        btn.disabled = true; btn.innerText = "Bahnhöfe werden gesucht...";
+        const s1 = await fetch(`https://transport.opendata.ch/v1/locations?query=${from}`).then(r => r.json()).then(d => d.stations[0]);
+        const s2 = await fetch(`https://transport.opendata.ch/v1/locations?query=${to}`).then(r => r.json()).then(d => d.stations[0]);
 
-        try {
-            const s1 = await fetch(`https://transport.opendata.ch/v1/locations?query=${encodeURIComponent(fromVal)}`).then(r => r.json()).then(d => d.stations[0]);
-            const s2 = await fetch(`https://transport.opendata.ch/v1/locations?query=${encodeURIComponent(toVal)}`).then(r => r.json()).then(d => d.stations[0]);
-            
-            if(!s1 || !s2) throw new Error("Bahnhof nicht gefunden. Bitte Namen prüfen.");
-
-            const km = calculateDistance(s1.coordinate.x, s1.coordinate.y, s2.coordinate.x, s2.coordinate.y);
-
-            if(editingId) {
-                const idx = journeys.findIndex(j => j.id === editingId);
-                journeys[idx] = { ...journeys[idx], from: s1.name, to: s2.name, price, km, date: new Date(date).toISOString() };
-                cancelEdit();
-            } else {
-                journeys.push({ id: Date.now(), from: s1.name, to: s2.name, price, km, date: new Date(date).toISOString() });
-            }
-
-            journeys.sort((a, b) => new Date(b.date) - new Date(a.date));
-            saveAndRender();
-            resetForm();
-        } catch(e) { alert(e.message); }
-        finally { btn.disabled = false; btn.innerText = editingId ? "Änderungen speichern" : "Fahrt speichern"; }
-    }
-
-    function calculateDistance(lat1, lon1, lat2, lon2) {
-        // Sicherstellen, dass es Zahlen sind
-        const pLat1 = parseFloat(lat1);
-        const pLon1 = parseFloat(lon1);
-        const pLat2 = parseFloat(lat2);
-        const pLon2 = parseFloat(lon2);
-
-        if (isNaN(pLat1) || isNaN(pLat2)) return 0;
-
-        const R = 6371; // Erdradius
-        const dLat = (pLat2 - pLat1) * Math.PI / 180;
-        const dLon = (pLon2 - pLon1) * Math.PI / 180;
-        const a = Math.sin(dLat/2)**2 + Math.cos(pLat1*Math.PI/180)*Math.cos(pLat2*Math.PI/180)*Math.sin(dLon/2)**2;
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-        const dist = R * c * 1.25; // Faktor 1.25 für Schienenweg
-        
-        return parseFloat(dist.toFixed(1));
-    }
-
-    function deleteJourney(id) {
-        if(confirm("Löschen?")) {
-            journeys = journeys.filter(j => j.id !== id);
-            saveAndRender();
-        }
-    }
-
-    function editJourney(id) {
-        const j = journeys.find(j => j.id === id);
-        editingId = id;
-        document.getElementById('mFrom').value = j.from;
-        document.getElementById('mTo').value = j.to;
-        document.getElementById('mPrice').value = j.price;
-        document.getElementById('mDate').value = new Date(j.date).toISOString().split('T')[0];
-        document.getElementById('formTitle').innerText = "Fahrt bearbeiten";
-        document.getElementById('btnSave').innerText = "Änderungen speichern";
-        document.getElementById('btnCancel').classList.remove('hidden');
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-
-    function cancelEdit() {
-        editingId = null;
-        resetForm();
-        document.getElementById('formTitle').innerText = "Neue Reise erfassen";
-        document.getElementById('btnSave').innerText = "Fahrt speichern";
-        document.getElementById('btnCancel').classList.add('hidden');
-    }
-
-    function resetForm() {
-        document.getElementById('mFrom').value = '';
-        document.getElementById('mTo').value = '';
-        document.getElementById('mPrice').value = '';
-        document.getElementById('mDate').valueAsDate = new Date();
-    }
-
-    async function toggleCheckIn() {
-        if (!state.active) {
-            navigator.geolocation.getCurrentPosition(async (pos) => {
-                const res = await fetch(`https://transport.opendata.ch/v1/locations?x=${pos.coords.latitude}&y=${pos.coords.longitude}&type=station`).then(r => r.json());
-                state = { active: true, startStation: res.stations[0], startTime: Date.now() };
-                saveAndRender();
-            }, () => alert("GPS Zugriff verweigert."));
-        } else {
-            navigator.geolocation.getCurrentPosition(async (pos) => {
-                const res = await fetch(`https://transport.opendata.ch/v1/locations?x=${pos.coords.latitude}&y=${pos.coords.longitude}&type=station`).then(r => r.json());
-                const s2 = res.stations[0];
-                const km = calculateDistance(state.startStation.coordinate.x, state.startStation.coordinate.y, s2.coordinate.x, s2.coordinate.y);
-                const real = prompt(`Check-Out in ${s2.name}.\nPreis in CHF?`, (km * config.avgChfKm).toFixed(2));
-                
-                journeys.unshift({ id: Date.now(), from: state.startStation.name, to: s2.name, price: parseFloat(real) || 0, km, date: new Date().toISOString() });
-                state = { active: false, startStation: null, startTime: null };
-                saveAndRender();
-            });
-        }
-    }
-
-    function saveAndRender() {
+        const km = calculateDistance(s1.coordinate.x, s1.coordinate.y, s2.coordinate.x, s2.coordinate.y);
+        journeys.unshift({ id: Date.now(), from: s1.name, to: s2.name, price, km, date: new Date(date).toISOString(), coords: [[s1.coordinate.x, s1.coordinate.y], [s2.coordinate.x, s2.coordinate.y]] });
         localStorage.setItem('swissJourneys', JSON.stringify(journeys));
-        localStorage.setItem('trackerState', JSON.stringify(state));
         render();
+        updateMap();
+    }
+
+    function calculateDistance(la1, lo1, la2, lo2) {
+        const R = 6371;
+        const dLat = (la2 - la1) * Math.PI / 180;
+        const dLon = (lo2 - lo1) * Math.PI / 180;
+        const a = Math.sin(dLat/2)**2 + Math.cos(la1*Math.PI/180)*Math.cos(la2*Math.PI/180)*Math.sin(dLon/2)**2;
+        return parseFloat((R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)) * 1.25).toFixed(1));
     }
 
     function render() {
-        const monthSum = journeys.filter(j => new Date(j.date).getMonth() === new Date().getMonth()).reduce((s, j) => s + j.price, 0);
-        document.getElementById('currentMonthTotal').innerText = monthSum.toFixed(2);
-        document.getElementById('budgetProgress').style.width = Math.min((monthSum / config.budgetGoal) * 100, 100) + '%';
-        
+        const now = new Date();
+        const yearTrips = journeys.filter(j => new Date(j.date).getFullYear() === now.getFullYear());
+        const total = yearTrips.reduce((s, j) => s + j.price, 0);
+        const kmTotal = journeys.reduce((s, j) => s + j.km, 0);
+
+        // Prognose Logik
+        if (yearTrips.length > 0) {
+            const firstTrip = new Date(yearTrips[yearTrips.length-1].date);
+            const diffTime = Math.abs(now - firstTrip);
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
+            const avgPerDay = total / diffDays;
+            const projected = avgPerDay * 365;
+            
+            document.getElementById('projectedTotal').innerText = Math.round(projected).toLocaleString();
+            
+            const breakEvenDays = GA_PRICE / avgPerDay;
+            const breakEvenDate = new Date(firstTrip.getTime() + (breakEvenDays * 24 * 60 * 60 * 1000));
+            
+            document.getElementById('breakEvenDate').innerText = projected > GA_PRICE ? breakEvenDate.toLocaleDateString('de-CH', {day:'2-digit', month:'short'}) : 'Nie';
+            document.getElementById('potentialSaving').innerText = (projected > GA_PRICE) ? `CHF ${(projected - GA_PRICE).toFixed(0)}` : 'CHF 0';
+            
+            if (projected > GA_PRICE) {
+                document.getElementById('predictionText').innerText = `Bei deinem aktuellen Fahrverhalten lohnt sich ein GA ab dem ${breakEvenDate.toLocaleDateString('de-CH')}. Am Jahresende hättest du mit dem GA rund CHF ${(projected - GA_PRICE).toFixed(0)} gespart.`;
+            } else {
+                document.getElementById('predictionText').innerText = `Mit deinem aktuellen Tempo kommst du Ende Jahr auf CHF ${Math.round(projected)}. Einzelbillette sind für dich günstiger als ein GA.`;
+            }
+        }
+
+        document.getElementById('totalSpent').innerText = `CHF ${total.toFixed(2)}`;
+        document.getElementById('co2Saved').innerText = (kmTotal * 0.12).toFixed(1);
+        const percent = Math.min((total / GA_PRICE) * 100, 100);
+        document.getElementById('gaProgress').style.width = percent + '%';
+        document.getElementById('gaPercent').innerText = percent.toFixed(1) + '%';
+        document.getElementById('gaStatusLabel').innerText = `${percent.toFixed(1)}% VOM GA ERREICHT`;
+
         const list = document.getElementById('journeyList');
         list.innerHTML = '';
         journeys.forEach(j => {
-            list.innerHTML += `
-                <div class="bg-white p-4 rounded-3xl border border-slate-100 flex justify-between items-center shadow-sm">
-                    <div class="flex-1 min-w-0 pr-4">
-                        <div class="font-bold text-slate-800 text-[12px] truncate">${j.from} → ${j.to}</div>
-                        <div class="text-[9px] text-slate-400 font-bold uppercase">${new Date(j.date).toLocaleDateString('de-CH')} • ${j.km} KM</div>
-                    </div>
-                    <div class="flex items-center gap-3">
-                        <div class="text-red-600 font-black text-sm">CHF ${j.price.toFixed(2)}</div>
-                        <div class="flex gap-1 border-l pl-3 border-slate-100">
-                            <button onclick="editJourney(${j.id})" class="p-1 text-slate-300"><i data-lucide="edit-3" class="w-3.5 h-3.5"></i></button>
-                            <button onclick="deleteJourney(${j.id})" class="p-1 text-slate-300"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
-                        </div>
-                    </div>
-                </div>`;
+            list.innerHTML += `<div class="bg-white p-4 rounded-3xl border border-slate-100 flex justify-between items-center shadow-sm">
+                <div class="flex-1 truncate pr-2"><div class="font-bold text-slate-800 text-xs truncate">${j.from} → ${j.to}</div><div class="text-[9px] text-slate-400 font-bold uppercase">${new Date(j.date).toLocaleDateString('de-CH')} • ${j.km} KM</div></div>
+                <div class="text-red-600 font-black text-sm">CHF ${j.price.toFixed(2)}</div>
+            </div>`;
         });
-        updateUI();
-        updateChart();
-    }
-
-    function updateUI() {
-        const h = document.getElementById('handle');
-        if (state.active) {
-            h.style.left = "calc(100% - 3.25rem)";
-            h.classList.add('bg-red-600');
-            document.getElementById('handleIcon').setAttribute('data-lucide', 'square');
-            document.getElementById('buttonLabel').innerText = "Check-Out";
-            document.getElementById('activeInfo').classList.remove('hidden');
-            document.getElementById('startTimeText').innerText = state.startStation.name;
-        } else {
-            h.style.left = "0.25rem";
-            h.classList.remove('bg-red-600');
-            document.getElementById('handleIcon').setAttribute('data-lucide', 'play');
-            document.getElementById('buttonLabel').innerText = "Live Check-In";
-            document.getElementById('activeInfo').classList.add('hidden');
-        }
         lucide.createIcons();
     }
 
-    function updateChart() {
-        const ctx = document.getElementById('weeklyChart').getContext('2d');
-        const last7 = [...Array(7)].map((_, i) => {
-            const d = new Date(); d.setDate(d.getDate() - i);
-            return d.toISOString().split('T')[0];
-        }).reverse();
-        const data = last7.map(d => journeys.filter(j => j.date.startsWith(d)).reduce((s, j) => s + j.price, 0));
-        if(myChart) myChart.destroy();
-        myChart = new Chart(ctx, {
-            type: 'bar',
-            data: { labels: ['M','D','M','D','F','S','S'], datasets: [{ data: data, backgroundColor: '#dc2626', borderRadius: 4 }] },
-            options: { maintainAspectRatio: false, plugins: { legend: {display: false} }, scales: { y: {display: false}, x: {grid: {display: false}, ticks: {font: {size: 8}}} } }
+    function updateMap() {
+        if(!map) return;
+        markers.forEach(m => map.removeLayer(m));
+        markers = [];
+        journeys.slice(0, 15).forEach(j => {
+            if(j.coords) {
+                const line = L.polyline(j.coords, { color: '#dc2626', weight: 4, opacity: 0.4, lineCap: 'round' }).addTo(map);
+                markers.push(line);
+            }
         });
+        if(journeys.length > 0 && journeys[0].coords) map.panTo(journeys[0].coords[0]);
     }
 
-    function exportToCSV() {
-        let csv = "\uFEFFDatum;Von;Bis;KM;CHF\n";
-        journeys.forEach(j => csv += `${new Date(j.date).toLocaleDateString()};${j.from};${j.to};${j.km};${j.price}\n`);
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'SwissTrack_Export.csv'; a.click();
+    function toggleDarkMode() { document.body.classList.toggle('dark-mode'); }
+    function backupData() {
+        const blob = new Blob([JSON.stringify(journeys)], { type: 'application/json' });
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'swisstrack_v7.json'; a.click();
     }
 
+    initMap();
     render();
 </script>
 </body>
